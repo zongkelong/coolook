@@ -1,7 +1,14 @@
-import type { Change, StyleActionTarget, UpdateStyleAction } from '@onlook/models/actions';
+import {
+    type Change,
+    type StyleActionTarget,
+    type UpdateStyleAction,
+} from '@onlook/models/actions';
 import type { DomElement } from '@onlook/models/element';
+import { StyleChangeType, type StyleChange } from '@onlook/models/style';
 import { makeAutoObservable, reaction } from 'mobx';
 import type { EditorEngine } from '..';
+import type { Font } from '@onlook/models/assets';
+import { convertFontString } from '@onlook/utility';
 
 export interface SelectedStyle {
     styles: Record<string, string>;
@@ -28,6 +35,48 @@ export class StyleManager {
         );
     }
 
+    updateCustom(style: string, value: string, domIds: string[] = []) {
+        const styleObj = { [style]: value };
+        const action = this.getUpdateStyleAction(styleObj, domIds, StyleChangeType.Custom);
+        this.editorEngine.action.run(action);
+        this.updateStyleNoAction(styleObj);
+    }
+
+    updateFontFamily(style: string, value: Font) {
+        const styleObj = { [style]: value.id };
+        const action = this.getUpdateStyleAction(styleObj);
+        const formattedAction = {
+            ...action,
+            targets: action.targets.map((val) => ({
+                ...val,
+                change: {
+                    original: Object.fromEntries(
+                        Object.entries(val.change.original).map(([key, styleChange]) => [
+                            key,
+                            {
+                                ...styleChange,
+                                value: convertFontString(styleChange.value),
+                            },
+                        ]),
+                    ),
+                    updated: Object.fromEntries(
+                        Object.entries(val.change.updated).map(([key, styleChange]) => [
+                            key,
+                            {
+                                ...styleChange,
+                                value: convertFontString(styleChange.value),
+                            },
+                        ]),
+                    ),
+                },
+            })),
+        };
+        this.editorEngine.action.run(formattedAction);
+        setTimeout(() => {
+            this.editorEngine.webviews.reloadWebviews();
+        }, 500);
+    }
+
     update(style: string, value: string) {
         const styleObj = { [style]: value };
         const action = this.getUpdateStyleAction(styleObj);
@@ -36,25 +85,46 @@ export class StyleManager {
     }
 
     updateMultiple(styles: Record<string, string>) {
+        this.updateStyleNoAction(styles);
         const action = this.getUpdateStyleAction(styles);
         this.editorEngine.action.run(action);
-        this.updateStyleNoAction(styles);
     }
 
-    getUpdateStyleAction(styles: Record<string, string>, domIds: string[] = []): UpdateStyleAction {
+    getUpdateStyleAction(
+        styles: Record<string, string>,
+        domIds: string[] = [],
+        type: StyleChangeType = StyleChangeType.Value,
+    ): UpdateStyleAction {
         const selected = this.editorEngine.elements.selected;
         const filteredSelected =
             domIds.length > 0 ? selected.filter((el) => domIds.includes(el.domId)) : selected;
 
         const targets: Array<StyleActionTarget> = filteredSelected.map((selectedEl) => {
-            const change: Change<Record<string, string>> = {
-                updated: styles,
+            const change: Change<Record<string, StyleChange>> = {
+                updated:
+                    type === StyleChangeType.Custom
+                        ? Object.fromEntries(
+                              Object.keys(styles).map((style) => [
+                                  style,
+                                  { value: styles[style], type: StyleChangeType.Custom },
+                              ]),
+                          )
+                        : Object.fromEntries(
+                              Object.keys(styles).map((style) => [
+                                  style,
+                                  { value: styles[style], type: StyleChangeType.Value },
+                              ]),
+                          ),
                 original: Object.fromEntries(
                     Object.keys(styles).map((style) => [
                         style,
-                        selectedEl.styles?.defined[style] ??
-                            selectedEl.styles?.computed[style] ??
-                            '',
+                        {
+                            value:
+                                selectedEl.styles?.defined[style] ??
+                                selectedEl.styles?.computed[style] ??
+                                '',
+                            type: StyleChangeType.Value,
+                        },
                     ]),
                 ),
             };
@@ -66,6 +136,7 @@ export class StyleManager {
             };
             return target;
         });
+
         return {
             type: 'update-style',
             targets: targets,

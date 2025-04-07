@@ -1,9 +1,15 @@
-import type { RunBunCommandOptions, RunBunCommandResult } from '@onlook/models';
+import type {
+    DetectedPortResults,
+    RunBunCommandOptions,
+    RunBunCommandResult,
+} from '@onlook/models';
 import { exec } from 'child_process';
+import { detect } from 'detect-port';
 import { app } from 'electron';
 import path from 'path';
 import { promisify } from 'util';
 import { __dirname } from '../index';
+import { PersistentStorage } from '../storage';
 import { replaceCommand } from './parse';
 
 const execAsync = promisify(exec);
@@ -45,6 +51,13 @@ export async function runBunCommand(
 }
 
 export const getBunCommand = (command: string): string => {
+    const userSettings = PersistentStorage.USER_SETTINGS.read() || {};
+    const enableBunReplace = userSettings.editor?.enableBunReplace !== false;
+
+    if (!enableBunReplace) {
+        return command;
+    }
+
     const bunExecutable = getBunExecutablePath();
     return replaceCommand(command, bunExecutable);
 };

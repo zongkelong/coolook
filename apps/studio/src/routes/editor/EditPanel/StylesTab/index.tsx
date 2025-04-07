@@ -14,11 +14,13 @@ import { Icons } from '@onlook/ui/icons/index';
 import { Tooltip, TooltipContent, TooltipPortal, TooltipTrigger } from '@onlook/ui/tooltip';
 import { cn } from '@onlook/ui/utils';
 import { observer } from 'mobx-react-lite';
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import BorderInput from './compound/BorderInput';
 import DisplayInput from './compound/DisplayInput';
 import FillInput from './compound/FillInput';
 import NestedInputs from './compound/NestedInputs';
+import PositionInput from './compound/PositionInput';
 import AutoLayoutInput from './single/AutoLayoutInput';
 import ColorInput from './single/ColorInput';
 import NumberUnitInput from './single/NumberUnitInput';
@@ -26,6 +28,7 @@ import SelectInput from './single/SelectInput';
 import TagDetails from './single/TagDetails';
 import TailwindInput from './single/TailwindInput';
 import TextInput from './single/TextInput';
+import { FontInput } from './single/FontInput';
 
 const STYLE_GROUP_MAPPING: Record<StyleGroupKey, BaseStyle[]> = {
     [StyleGroupKey.Position]: PositionGroup,
@@ -45,6 +48,8 @@ const SingleInput = memo(({ style }: { style: SingleStyle }) => {
         return <NumberUnitInput elementStyle={style} />;
     } else if (style.type === StyleType.Text) {
         return <TextInput elementStyle={style} />;
+    } else if (style.type === StyleType.Font) {
+        return <FontInput elementStyle={style} />;
     }
     return (
         <div className="flex flex-row items-center">
@@ -55,10 +60,11 @@ const SingleInput = memo(({ style }: { style: SingleStyle }) => {
 SingleInput.displayName = 'SingleInput';
 
 const SingleStyle = memo(({ style }: { style: SingleStyle }) => {
+    const { t } = useTranslation();
     return (
         <div className="flex flex-row items-center mt-2">
             <p className="text-xs w-24 mr-2 text-start text-foreground-onlook">
-                {style.displayName}
+                {t(style.displayName)}
             </p>
             <div className="text-end ml-auto">
                 <SingleInput style={style} />
@@ -81,6 +87,8 @@ const CompoundStyle = memo(({ style }: { style: CompoundStyleImpl }) => {
         return <BorderInput compoundStyle={style} />;
     } else if (style.key === CompoundStyleKey.Fill) {
         return <FillInput compoundStyle={style} />;
+    } else if (style.key === CompoundStyleKey.Position) {
+        return <PositionInput compoundStyle={style} />;
     } else {
         return (
             <div className="flex flex-row items-center">
@@ -108,8 +116,10 @@ const StyleGroupComponent = memo(({ baseElementStyles }: { baseElementStyles: Ba
 });
 StyleGroupComponent.displayName = 'StyleGroupComponent';
 
-const AccordionHeader = memo(({ groupKey }: { groupKey: string }) => {
+const AccordionHeader = observer(({ groupKey }: { groupKey: string }) => {
+    const { t } = useTranslation();
     const editorEngine = useEditorEngine();
+
     return (
         <Tooltip>
             <TooltipTrigger asChild disabled={editorEngine.style.mode !== StyleMode.Instance}>
@@ -127,22 +137,28 @@ const AccordionHeader = memo(({ groupKey }: { groupKey: string }) => {
                                 'w-3 h-3 text-purple-600 dark:text-purple-300 group-hover:text-purple-500 dark:group-hover:text-purple-200',
                         )}
                     />
-                    {groupKey}
+                    {t(`editor.panels.edit.tabs.styles.groups.${groupKey.toLowerCase()}`)}
                 </div>
             </TooltipTrigger>
             <TooltipPortal container={document.getElementById('style-tab-id')}>
-                <TooltipContent>{'Changes apply to instance code.'}</TooltipContent>
+                <TooltipContent
+                    className={`${editorEngine.style.mode !== StyleMode.Instance ? 'hidden' : ''}`}
+                >
+                    {t('editor.panels.edit.tabs.styles.tailwind.instanceClasses.tooltip')}
+                </TooltipContent>
             </TooltipPortal>
         </Tooltip>
     );
 });
+
 AccordionHeader.displayName = 'AccordionHeader';
 
 const TailwindSection = memo(() => {
+    const { t } = useTranslation();
     return (
         <AccordionItem value="tw">
             <AccordionTrigger>
-                <h2 className="text-xs">Tailwind Classes</h2>
+                <h2 className="text-xs">{t('editor.panels.edit.tabs.styles.tailwind.title')}</h2>
             </AccordionTrigger>
             <AccordionContent>
                 <TailwindInput />
@@ -156,7 +172,7 @@ const StyleSections = memo(() => {
     return Object.entries(STYLE_GROUP_MAPPING).map(([groupKey, baseElementStyles]) => (
         <AccordionItem key={groupKey} value={groupKey}>
             <AccordionTrigger className="mb-[-4px] mt-[-2px]">
-                <AccordionHeader groupKey={groupKey} />
+                <AccordionHeader groupKey={groupKey as StyleGroupKey} />
             </AccordionTrigger>
             <AccordionContent className="mt-2px">
                 {groupKey === StyleGroupKey.Text && <TagDetails />}
@@ -167,8 +183,14 @@ const StyleSections = memo(() => {
 });
 StyleSections.displayName = 'StyleSections';
 
-const StylesTab = observer(() => {
+export const StylesTab = observer(() => {
     const editorEngine = useEditorEngine();
+
+    useEffect(() => {
+        editorEngine.theme.scanConfig();
+        editorEngine.font.scanFonts();
+    }, []);
+
     return (
         editorEngine.elements.selected.length > 0 &&
         editorEngine.style.selectedStyle && (
@@ -183,5 +205,3 @@ const StylesTab = observer(() => {
         )
     );
 });
-
-export default StylesTab;

@@ -1,17 +1,28 @@
 import { PromptProvider } from '@onlook/ai/src/prompt/provider';
-import { listFilesTool, readFileTool } from '@onlook/ai/src/tools';
+import { chatToolSet } from '@onlook/ai/src/tools';
+import { CLAUDE_MODELS, LLMProvider } from '@onlook/models';
 import {
     ChatSuggestionSchema,
+    ChatSummarySchema,
     StreamRequestType,
     type ChatSuggestion,
-    type StreamResponse,
+    type CompletedStreamResponse,
+    type PartialStreamResponse,
     type UsageCheckResult,
 } from '@onlook/models/chat';
 import { MainChannels } from '@onlook/models/constants';
-import { generateObject, streamText, type CoreMessage, type CoreSystemMessage } from 'ai';
+import {
+    generateObject,
+    streamText,
+    type CoreMessage,
+    type CoreSystemMessage,
+    type TextStreamPart,
+    type ToolSet,
+} from 'ai';
+import { z } from 'zod';
 import { mainWindow } from '..';
 import { PersistentStorage } from '../storage';
-import { CLAUDE_MODELS, initModel, LLMProvider } from './llmProvider';
+import { initModel } from './llmProvider';
 
 class LlmManager {
     private static instance: LlmManager;
@@ -53,7 +64,7 @@ class LlmManager {
             abortController?: AbortController;
             skipSystemPrompt?: boolean;
         },
-    ): Promise<StreamResponse> {
+    ): Promise<CompletedStreamResponse> {
         const { abortController, skipSystemPrompt } = options || {};
         this.abortController = abortController || new AbortController();
         try {
@@ -71,26 +82,37 @@ class LlmManager {
                 requestType,
             });
 
-            const { textStream } = await streamText({
+            const { usage, fullStream, text, response } = await streamText({
                 model,
                 messages,
                 abortSignal: this.abortController?.signal,
                 onError: (error) => {
+                    console.error('Error', JSON.stringify(error, null, 2));
                     throw error;
                 },
                 maxSteps: 10,
-                tools: {
-                    listAllFiles: listFilesTool,
-                    readFile: readFileTool,
+                tools: chatToolSet,
+                maxTokens: 64000,
+                headers: {
+                    'anthropic-beta': 'output-128k-2025-02-19',
+                },
+                onStepFinish: ({ toolResults }) => {
+                    for (const toolResult of toolResults) {
+                        this.emitMessagePart(toolResult);
+                    }
                 },
             });
-
-            let fullText = '';
-            for await (const partialText of textStream) {
-                fullText += partialText;
-                this.emitPartialMessage(fullText);
+            const streamParts: TextStreamPart<ToolSet>[] = [];
+            for await (const partialStream of fullStream) {
+                this.emitMessagePart(partialStream);
+                streamParts.push(partialStream);
             }
-            return { content: fullText, status: 'full' };
+            return {
+                payload: (await response).messages,
+                type: 'full',
+                usage: await usage,
+                text: await text,
+            };
         } catch (error: any) {
             try {
                 console.error('Error', error);
@@ -100,22 +122,21 @@ class LlmManager {
                             error.error.responseBody,
                         ) as UsageCheckResult;
                         return {
-                            status: 'rate-limited',
-                            content: 'You have reached your daily limit.',
+                            type: 'rate-limited',
                             rateLimitResult: rateLimitError,
                         };
                     } else {
                         return {
-                            status: 'error',
-                            content: error.error.responseBody,
+                            type: 'error',
+                            message: error.error.responseBody,
                         };
                     }
                 }
                 const errorMessage = this.getErrorMessage(error);
-                return { content: errorMessage, status: 'error' };
+                return { message: errorMessage, type: 'error' };
             } catch (error) {
                 console.error('Error parsing error', error);
-                return { content: 'An unknown error occurred', status: 'error' };
+                return { message: 'An unknown error occurred', type: 'error' };
             } finally {
                 this.abortController = null;
             }
@@ -130,10 +151,10 @@ class LlmManager {
         return false;
     }
 
-    private emitPartialMessage(content: string) {
-        const res: StreamResponse = {
-            status: 'partial',
-            content,
+    private emitMessagePart(streamPart: TextStreamPart<ToolSet>) {
+        const res: PartialStreamResponse = {
+            type: 'partial',
+            payload: streamPart,
         };
         mainWindow?.webContents.send(MainChannels.CHAT_STREAM_PARTIAL, res);
     }
@@ -151,7 +172,7 @@ class LlmManager {
         if (error && typeof error === 'object' && 'message' in error) {
             return String(error.message);
         }
-        return 'An unknown error occurred';
+        return 'An unknown chat error occurred';
     }
 
     public async generateSuggestions(messages: CoreMessage[]): Promise<ChatSuggestion[]> {
@@ -170,6 +191,77 @@ class LlmManager {
         } catch (error) {
             console.error(error);
             return [];
+        }
+    }
+
+    public async generateChatSummary(messages: CoreMessage[]): Promise<string | null> {
+        try {
+            const model = await initModel(LLMProvider.ANTHROPIC, CLAUDE_MODELS.HAIKU, {
+                requestType: StreamRequestType.SUMMARY,
+            });
+
+            const systemMessage: CoreSystemMessage = {
+                role: 'system',
+                content: this.promptProvider.getSummaryPrompt(),
+                experimental_providerMetadata: {
+                    anthropic: { cacheControl: { type: 'ephemeral' } },
+                },
+            };
+
+            // Transform messages to emphasize they are historical content
+            const conversationMessages = messages
+                .filter((msg) => msg.role !== 'tool')
+                .map((msg) => {
+                    const prefix = '[HISTORICAL CONTENT] ';
+                    const content =
+                        typeof msg.content === 'string' ? prefix + msg.content : msg.content;
+
+                    return {
+                        ...msg,
+                        content,
+                    };
+                });
+
+            const { object } = await generateObject({
+                model,
+                schema: ChatSummarySchema,
+                messages: [
+                    { role: 'system', content: systemMessage.content as string },
+                    ...conversationMessages.map((msg) => ({
+                        role: msg.role,
+                        content: msg.content as string,
+                    })),
+                ],
+            });
+
+            const {
+                filesDiscussed,
+                projectContext,
+                implementationDetails,
+                userPreferences,
+                currentStatus,
+            } = object as z.infer<typeof ChatSummarySchema>;
+
+            // Formats the structured object into the desired text format
+            const summary = `# Files Discussed
+${filesDiscussed.join('\n')}
+
+# Project Context
+${projectContext}
+
+# Implementation Details
+${implementationDetails}
+
+# User Preferences
+${userPreferences}
+
+# Current Status
+${currentStatus}`;
+
+            return summary;
+        } catch (error) {
+            console.error('Error generating summary:', error);
+            return null;
         }
     }
 }

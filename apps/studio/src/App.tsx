@@ -1,12 +1,12 @@
-import './i18n';
-import { I18nextProvider } from 'react-i18next';
-import i18n from './i18n';
-import { TooltipProvider } from '@onlook/ui/tooltip';
-import AppBar from './components/AppBar';
-import { ThemeProvider } from './components/ThemeProvider';
-import { Toaster } from '@onlook/ui/toaster';
-import Routes from './routes';
 import '@fontsource-variable/inter';
+import { Toaster } from '@onlook/ui/toaster';
+import { TooltipProvider } from '@onlook/ui/tooltip';
+import { I18nextProvider } from 'react-i18next';
+import { AppBar } from './components/AppBar';
+import { Modals } from './components/Modals';
+import { ThemeProvider } from './components/ThemeProvider';
+import i18n from './i18n';
+import { Routes } from './routes';
 
 function App() {
     return (
@@ -15,6 +15,7 @@ function App() {
                 <TooltipProvider>
                     <AppBar />
                     <Routes />
+                    <Modals />
                     <Toaster />
                 </TooltipProvider>
             </ThemeProvider>

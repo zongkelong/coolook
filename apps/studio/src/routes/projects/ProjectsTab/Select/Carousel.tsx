@@ -6,7 +6,7 @@ import { motion, type Variants } from 'motion/react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getPreviewImage } from '../../helpers';
-import EditAppButton from './EditAppButton';
+import { EditAppButton } from './EditAppButton';
 
 interface EmblaCarouselProps {
     slides: Project[];
@@ -18,7 +18,7 @@ const numberWithinRange = (number: number, min: number, max: number): number =>
 
 const EmblaCarousel: React.FC<EmblaCarouselProps> = ({ slides, onSlideChange }) => {
     const WHEEL_SENSITIVITY = 13;
-    const SCROLL_COOLDOWN = 100;
+    const SCROLL_COOLDOWN = 50;
     const TWEEN_FACTOR_BASE = 0.3;
 
     const tweenFactor = useRef(0);

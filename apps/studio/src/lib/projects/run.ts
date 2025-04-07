@@ -1,9 +1,10 @@
 import { DefaultSettings, MainChannels } from '@onlook/models/constants';
 import type { Project } from '@onlook/models/projects';
 import { RunState } from '@onlook/models/run';
-import { makeAutoObservable } from 'mobx';
+import { makeAutoObservable, reaction } from 'mobx';
 import type { EditorEngine } from '../editor/engine';
 import { invokeMainChannel } from '../utils';
+import { PortManager } from './port';
 
 export type TerminalMessage = {
     id: string;
@@ -12,19 +13,27 @@ export type TerminalMessage = {
 
 export class RunManager {
     private project: Project;
-    state: RunState = RunState.STOPPED;
+    private portManager: PortManager;
+    private _state: RunState = RunState.STOPPED;
     message: string | null = null;
     isLoading: boolean = false;
+    private previousState: RunState = RunState.STOPPED;
     private cleanupLoadingTimer?: () => void;
 
     constructor(
-        project: Project,
         private editorEngine: EditorEngine,
+        project: Project,
     ) {
         makeAutoObservable(this);
         this.project = project;
+        this.portManager = new PortManager(this, project);
         this.restoreState();
         this.listenForStateChanges();
+    }
+
+    updateProject(project: Project) {
+        this.project = project;
+        this.portManager.updateProject(project);
     }
 
     get isRunning() {
@@ -41,6 +50,29 @@ export class RunManager {
 
     get isError() {
         return this.state === RunState.ERROR;
+    }
+
+    get port() {
+        return this.portManager;
+    }
+
+    get state() {
+        return this._state;
+    }
+
+    set state(state: RunState) {
+        if (this.previousState === state) {
+            return;
+        }
+        this.previousState = this._state;
+        this._state = state;
+    }
+
+    async startIfPortAvailable() {
+        const isPortAvailable = await this.portManager.checkPort();
+        if (isPortAvailable) {
+            this.start();
+        }
     }
 
     async start() {
@@ -132,6 +164,17 @@ export class RunManager {
                 this.editorEngine.errors.addTerminalError(message);
             }
         });
+
+        reaction(
+            () => this.editorEngine.errors.errors,
+            (errors) => {
+                if (errors.length > 0) {
+                    this.state = RunState.ERROR;
+                } else {
+                    this.state = this.previousState;
+                }
+            },
+        );
     }
 
     handleTerminalInput(data: string) {
@@ -160,5 +203,6 @@ export class RunManager {
             this.cleanupLoadingTimer();
         }
         await this.stop();
+        this.portManager.dispose();
     }
 }

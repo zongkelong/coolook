@@ -1,24 +1,25 @@
-import { DEFAULT_PAGE_CONTENT, PAGE_SYSTEM_PROMPT } from '@onlook/ai/src/prompt';
+import { extractCodeBlocks } from '@onlook/ai/src/coder';
+import { PAGE_SYSTEM_PROMPT, PromptProvider } from '@onlook/ai/src/prompt';
 import { CreateStage, type CreateCallback, type CreateProjectResponse } from '@onlook/models';
 import {
     StreamRequestType,
+    type ErrorStreamResponse,
     type ImageMessageContext,
-    type StreamResponse,
+    type PartialStreamResponse,
+    type RateLimitedStreamResponse,
 } from '@onlook/models/chat';
 import { MainChannels } from '@onlook/models/constants';
 import type { CoreMessage, CoreSystemMessage } from 'ai';
-import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { mainWindow } from '..';
 import Chat from '../chat';
+import { getCreateProjectPath } from './helpers';
 import { createProject } from './install';
 
 export class ProjectCreator {
     private static instance: ProjectCreator;
     private abortController: AbortController | null = null;
-
-    private constructor() {}
 
     public static getInstance(): ProjectCreator {
         if (!ProjectCreator.instance) {
@@ -91,14 +92,12 @@ export class ProjectCreator {
             throw new Error('No active creation process');
         }
 
-        const defaultPagePath = 'app/page.tsx';
-
         const messages = this.getMessages(prompt, images);
         this.emitPromptProgress('Generating page...', 10);
-
+        const systemPrompt = new PromptProvider().getCreatePageSystemPrompt();
         const systemMessage: CoreSystemMessage = {
             role: 'system',
-            content: PAGE_SYSTEM_PROMPT,
+            content: systemPrompt,
             experimental_providerMetadata: {
                 anthropic: { cacheControl: { type: 'ephemeral' } },
             },
@@ -109,13 +108,15 @@ export class ProjectCreator {
             skipSystemPrompt: true,
         });
 
-        if (response.status !== 'full') {
+        if (response.type !== 'full') {
             throw new Error('Failed to generate page. ' + this.getStreamErrorMessage(response));
         }
 
+        const content = extractCodeBlocks(response.text);
+
         return {
-            path: defaultPagePath,
-            content: response.content,
+            path: PAGE_SYSTEM_PROMPT.defaultPath,
+            content,
         };
     }
 
@@ -128,8 +129,7 @@ export class ProjectCreator {
             throw new Error('AbortError');
         }
 
-        const documentsPath = app.getPath('documents');
-        const projectsPath = path.join(documentsPath, 'Onlook', 'Projects');
+        const projectsPath = getCreateProjectPath();
         await fs.promises.mkdir(projectsPath, { recursive: true });
         const projectName = `project-${Date.now()}`;
 
@@ -150,7 +150,7 @@ export class ProjectCreator {
                 progress = 40;
                 break;
             case CreateStage.COMPLETE:
-                progress = 80;
+                progress = 50;
                 this.emitPromptProgress('Project created! Generating page...', progress);
                 return;
         }
@@ -167,7 +167,7 @@ export class ProjectCreator {
     private getMessages(prompt: string, images: ImageMessageContext[]): CoreMessage[] {
         const promptContent = `${images.length > 0 ? 'Refer to the images above. ' : ''}Create a landing page that matches this description: ${prompt}
 Use this as the starting template:
-${DEFAULT_PAGE_CONTENT}`;
+${PAGE_SYSTEM_PROMPT.defaultContent}`;
 
         // For text-only messages
         if (images.length === 0) {
@@ -208,16 +208,14 @@ ${DEFAULT_PAGE_CONTENT}`;
         await fs.promises.writeFile(pagePath, generatedPage.content);
     }
 
-    private getStreamErrorMessage(streamResult: StreamResponse): string {
-        if (streamResult.status === 'error') {
-            return streamResult.content;
+    private getStreamErrorMessage(
+        streamResult: PartialStreamResponse | ErrorStreamResponse | RateLimitedStreamResponse,
+    ): string {
+        if (streamResult.type === 'error') {
+            return streamResult.message;
         }
 
-        if (streamResult.status === 'partial') {
-            return streamResult.content;
-        }
-
-        if (streamResult.status === 'rate-limited') {
+        if (streamResult.type === 'rate-limited') {
             if (streamResult.rateLimitResult) {
                 const requestLimit =
                     streamResult.rateLimitResult.reason === 'daily'
@@ -227,6 +225,10 @@ ${DEFAULT_PAGE_CONTENT}`;
                 return `You reached your ${streamResult.rateLimitResult.reason} ${requestLimit} message limit.`;
             }
             return 'Rate limit exceeded. Please try again later.';
+        }
+
+        if (streamResult.type === 'partial') {
+            return 'Returned partial response';
         }
 
         return 'Unknown error';

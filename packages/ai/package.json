@@ -31,8 +31,10 @@
         "@onlook/typescript": "*"
     },
     "dependencies": {
+        "@ai-sdk/anthropic": "^1.1.17",
+        "ai": "^4.2.6",
         "diff-match-patch": "^1.0.5",
         "fg": "^0.0.3",
-        "simple-git": "^3.27.0"
+        "marked": "^15.0.7"
     }
 }

@@ -1,7 +1,12 @@
-import { sendAnalytics } from '@/lib/utils';
+import type { ProjectsManager } from '@/lib/projects';
+import { invokeMainChannel, sendAnalytics } from '@/lib/utils';
 import { CodeBlockProcessor } from '@onlook/ai';
-import type { AssistantChatMessage, CodeBlock } from '@onlook/models/chat';
+import { ChatMessageRole, type AssistantChatMessage, type CodeBlock } from '@onlook/models/chat';
 import type { CodeDiff } from '@onlook/models/code';
+import { MainChannels } from '@onlook/models/constants';
+import { toast } from '@onlook/ui/use-toast';
+import { SampleFeedbackType } from '@trainloop/sdk';
+import type { CoreMessage } from 'ai';
 import { makeAutoObservable } from 'mobx';
 import type { ChatManager } from '.';
 import type { EditorEngine } from '..';
@@ -12,6 +17,7 @@ export class ChatCodeManager {
     constructor(
         private chat: ChatManager,
         private editorEngine: EditorEngine,
+        private projectsManager: ProjectsManager,
     ) {
         makeAutoObservable(this);
         this.processor = new CodeBlockProcessor();
@@ -23,22 +29,34 @@ export class ChatCodeManager {
             console.error('No message found with id', messageId);
             return;
         }
-        if (message.type !== 'assistant') {
+        if (message.role !== ChatMessageRole.ASSISTANT) {
             console.error('Can only apply code to assistant messages');
             return;
         }
-        const fileToCodeBlocks = this.getFileToCodeBlocks(message);
 
+        const fileToCodeBlocks = this.getFileToCodeBlocks(message);
+        let applySuccess = true;
         for (const [file, codeBlocks] of fileToCodeBlocks) {
             // If file doesn't exist, we'll assume it's a new file and create it
-            const originalContent = (await this.editorEngine.code.getFileContent(file, true)) || '';
+            const originalContent =
+                (await this.editorEngine.code.getFileContent(file, false)) || '';
             if (originalContent == null) {
                 console.error('Failed to get file content', file);
                 continue;
             }
             let content = originalContent;
             for (const block of codeBlocks) {
-                content = await this.processor.applyDiff(content, block.content);
+                const result = await this.processor.applyDiff(content, block.content);
+                if (!result.success) {
+                    applySuccess = false;
+                    console.error('Failed to apply code block', block);
+                    toast({
+                        title: 'Failed to apply code block',
+                        variant: 'destructive',
+                        description: 'Please try again or prompt the AI to fix it.',
+                    });
+                }
+                content = result.text;
             }
 
             const success = await this.writeFileContent(file, content, originalContent);
@@ -63,12 +81,20 @@ export class ChatCodeManager {
         }
 
         this.chat.suggestions.shouldHide = false;
-        this.editorEngine.errors.clear();
+        this.saveApplyResult(
+            message,
+            applySuccess ? SampleFeedbackType.GOOD : SampleFeedbackType.BAD,
+        );
 
         setTimeout(() => {
             this.editorEngine.webviews.reloadWebviews();
+            this.editorEngine.errors.clear();
         }, 500);
         sendAnalytics('apply code change');
+    }
+
+    saveApplyResult(message: CoreMessage, type: SampleFeedbackType) {
+        invokeMainChannel(MainChannels.SAVE_APPLY_RESULT, { type, messages: [message] });
     }
 
     async revertCode(messageId: string) {
@@ -77,7 +103,7 @@ export class ChatCodeManager {
             console.error('No message found with id', messageId);
             return;
         }
-        if (message.type !== 'assistant') {
+        if (message.role !== ChatMessageRole.ASSISTANT) {
             console.error('Can only revert code to assistant messages');
             return;
         }
@@ -124,8 +150,13 @@ export class ChatCodeManager {
     }
 
     getFileToCodeBlocks(message: AssistantChatMessage) {
+        // TODO: Need to handle failure cases
         const content = message.content;
-        const codeBlocks = this.processor.extractCodeBlocks(content);
+        const contentString =
+            typeof content === 'string'
+                ? content
+                : content.map((part) => (part.type === 'text' ? part.text : '')).join('');
+        const codeBlocks = this.processor.extractCodeBlocks(contentString);
         const fileToCode: Map<string, CodeBlock[]> = new Map();
         for (const codeBlock of codeBlocks) {
             if (!codeBlock.fileName) {

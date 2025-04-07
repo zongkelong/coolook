@@ -4,10 +4,10 @@ import { observer } from 'mobx-react-lite';
 import ProjectsTab from './ProjectsTab';
 import CreateProject from './ProjectsTab/Create';
 import PromptCreation from './PromptCreation';
-import TopBar from './TopBar';
+import { TopBar } from './TopBar';
 import { CreateMethod } from './helpers';
 
-const Projects = observer(() => {
+export const Projects = observer(() => {
     const projectsManager = useProjectsManager();
     const renderTab = () => {
         switch (projectsManager.projectsTab) {
@@ -38,5 +38,3 @@ const Projects = observer(() => {
         </div>
     );
 });
-
-export default Projects;

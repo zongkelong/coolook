@@ -39,6 +39,8 @@ export enum MainChannels {
     SEND_WINDOW_COMMAND = 'send-window-command',
     DELETE_FOLDER = 'delete-folder',
     IS_CHILD_TEXT_EDITABLE = 'is-child-text-editable',
+    IS_PORT_AVAILABLE = 'is-port-available',
+    CLEAN_UP_BEFORE_QUIT = 'clean-up-before-quit',
 
     // Code
     GET_CODE_BLOCK = 'get-code-block',
@@ -60,6 +62,7 @@ export enum MainChannels {
     GET_TEMPLATE_NODE_AST = 'get-template-node-ast',
     GET_TEMPLATE_NODE_CHILD = 'get-template-node-child',
     GET_TEMPLATE_NODE_CLASS = 'get-template-node-classes',
+    GET_TEMPLATE_NODE_PROPS = 'get-template-node-props',
 
     // Auth
     SIGN_IN = 'sign-in',
@@ -80,11 +83,13 @@ export enum MainChannels {
     UPDATE_PROJECTS = 'update-projects',
 
     // Create
+    GET_CREATE_PROJECT_PATH = 'get-create-project-path',
     CREATE_NEW_PROJECT = 'create-new-project',
     CREATE_NEW_PROJECT_CALLBACK = 'create-new-project-callback',
     SETUP_PROJECT = 'setup-project',
     SETUP_PROJECT_CALLBACK = 'setup-project-callback',
     INSTALL_PROJECT_DEPENDENCIES = 'install-project-dependencies',
+    REINSTALL_PROJECT_DEPENDENCIES = 'reinstall-project-dependencies',
     CREATE_NEW_PROJECT_PROMPT = 'create-new-project-prompt',
     CREATE_NEW_BLANK_PROJECT = 'create-new-blank-project',
     CREATE_NEW_PROJECT_PROMPT_CALLBACK = 'create-new-project-prompt-callback',
@@ -101,6 +106,7 @@ export enum MainChannels {
     GENERATE_SUGGESTIONS = 'generate-suggestions',
     GET_SUGGESTIONS_BY_PROJECT = 'get-suggestions-by-project',
     SAVE_SUGGESTIONS = 'save-suggestions',
+    GENERATE_CHAT_SUMMARY = 'generate-chat-summary',
 
     // Run
     RUN_START = 'run-start',
@@ -121,10 +127,12 @@ export enum MainChannels {
     TERMINAL_GET_HISTORY = 'terminal-get-history',
 
     // Hosting
-    START_DEPLOYMENT = 'start-deployment',
-    DEPLOY_STATE_CHANGED = 'deploy-state-changed',
-    UNPUBLISH_HOSTING_ENV = 'unpublish-hosting-env',
-    GET_CUSTOM_DOMAINS = 'get-custom-domains',
+    PUBLISH_TO_DOMAIN = 'publish-to-domain',
+    UNPUBLISH_DOMAIN = 'unpublish-domain',
+    PUBLISH_STATE_CHANGED = 'publish-state-changed',
+    GET_OWNED_DOMAINS = 'get-owned-domains',
+    CREATE_DOMAIN_VERIFICATION = 'create-domain-verification',
+    VERIFY_DOMAIN = 'verify-domain',
 
     // Payment
     CREATE_STRIPE_CHECKOUT = 'create-stripe-checkout',
@@ -135,10 +143,46 @@ export enum MainChannels {
     SCAN_PAGES = 'scan-pages',
     CREATE_PAGE = 'create-page',
     DELETE_PAGE = 'delete-page',
+    RENAME_PAGE = 'rename-page',
+    DUPLICATE_PAGE = 'duplicate-page',
 
     // Images
     SCAN_IMAGES_IN_PROJECT = 'scan-images-in-project',
     SAVE_IMAGE_TO_PROJECT = 'save-image-to-project',
     DELETE_IMAGE_FROM_PROJECT = 'delete-image-from-project',
     RENAME_IMAGE_IN_PROJECT = 'rename-image-in-project',
+
+    // Config
+    SCAN_TAILWIND_CONFIG = 'scan-tailwind-config',
+    UPDATE_TAILWIND_CONFIG = 'update-tailwind-config',
+    DELETE_TAILWIND_CONFIG = 'delete-tailwind-config',
+
+    // Fonts
+    SCAN_FONTS = 'scan-fonts-config',
+    ADD_FONT = 'add-font',
+    REMOVE_FONT = 'remove-font',
+    SET_FONT = 'set-font',
+    GET_DEFAULT_FONT = 'get-default-font',
+    UPLOAD_FONTS = 'upload-fonts',
+    WATCH_FONT_FILE = 'watch-font-file',
+
+    // Trainloop
+    SAVE_APPLY_RESULT = 'save-apply-result',
 }
+
+export enum GitChannels {
+    IS_REPO_INITIALIZED = 'is-repo-initialized',
+    IS_EMPTY_COMMIT = 'is-empty-commit',
+    INIT_REPO = 'init-repo',
+    ADD = 'add',
+    ADD_ALL = 'add-all',
+    STATUS = 'status',
+    COMMIT = 'commit',
+    CHECKOUT = 'checkout',
+    LIST_COMMITS = 'list-commits',
+    BRANCH = 'branch',
+    GET_CURRENT_COMMIT = 'get-current-commit',
+    RENAME_COMMIT = 'rename-commit',
+}
+
+export type Channels = MainChannels | GitChannels;

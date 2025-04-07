@@ -8,8 +8,8 @@ import { OverlayChat } from './Chat';
 import { ClickRect } from './ClickRect';
 import { HoverRect } from './HoverRect';
 import { InsertRect } from './InsertRect';
-import { TextEditor } from './TextEditor';
 import { MeasurementOverlay } from './MeasurementOverlay';
+import { TextEditor } from './TextEditor';
 
 // Memoize child components
 const MemoizedInsertRect = memo(InsertRect);
@@ -18,12 +18,12 @@ const MemoizedTextEditor = memo(TextEditor);
 const MemoizedChat = memo(OverlayChat);
 const MemoizedMeasurementOverlay = memo(MeasurementOverlay);
 
-const Overlay = observer(({ children }: { children: React.ReactNode }) => {
+export const Overlay = observer(({ children }: { children: React.ReactNode }) => {
     const editorEngine = useEditorEngine();
 
     // Memoize overlay state values
     const overlayState = editorEngine.overlay.state;
-    const isInteractMode = editorEngine.mode === EditorMode.INTERACT;
+    const isPreviewMode = editorEngine.mode === EditorMode.PREVIEW;
     const isSingleSelection = editorEngine.elements.selected.length === 1;
 
     // Memoize the container style object
@@ -35,9 +35,9 @@ const Overlay = observer(({ children }: { children: React.ReactNode }) => {
             top: 0,
             left: 0,
             pointerEvents: 'none',
-            visibility: isInteractMode ? 'hidden' : 'visible',
+            visibility: isPreviewMode ? 'hidden' : 'visible',
         }),
-        [isInteractMode],
+        [isPreviewMode],
     );
 
     // Memoize the clickRects rendering
@@ -99,5 +99,3 @@ const Overlay = observer(({ children }: { children: React.ReactNode }) => {
         </>
     );
 });
-
-export default Overlay;

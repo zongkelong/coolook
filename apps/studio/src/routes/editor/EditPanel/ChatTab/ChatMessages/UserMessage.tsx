@@ -12,11 +12,13 @@ interface UserMessageProps {
     message: UserChatMessageImpl;
 }
 
-const UserMessage = ({ message }: UserMessageProps) => {
+export const UserMessage = ({ message }: UserMessageProps) => {
     const editorEngine = useEditorEngine();
     const [isCopied, setIsCopied] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editValue, setEditValue] = useState('');
+    const [isComposing, setIsComposing] = useState(false);
+
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
@@ -27,7 +29,7 @@ const UserMessage = ({ message }: UserMessageProps) => {
     }, [isEditing, editValue]);
 
     const handleEditClick = () => {
-        setEditValue(message.content);
+        setEditValue(message.getStringContent());
         setIsEditing(true);
     };
 
@@ -42,7 +44,7 @@ const UserMessage = ({ message }: UserMessageProps) => {
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
             e.preventDefault();
             handleSubmit();
         } else if (e.key === 'Escape') {
@@ -52,14 +54,14 @@ const UserMessage = ({ message }: UserMessageProps) => {
     };
 
     function handleCopyClick() {
-        const text = message.content;
+        const text = message.getStringContent();
         navigator.clipboard.writeText(text);
         setIsCopied(true);
         setTimeout(() => setIsCopied(false), 2000);
     }
 
     const handleRetry = () => {
-        editorEngine.chat.resubmitMessage(message.id, message.content);
+        editorEngine.chat.resubmitMessage(message.id, message.getStringContent());
     };
 
     function renderEditingInput() {
@@ -72,6 +74,8 @@ const UserMessage = ({ message }: UserMessageProps) => {
                     className="text-small border-none resize-none px-0 mt-[-8px]"
                     rows={2}
                     onKeyDown={handleKeyDown}
+                    onCompositionStart={() => setIsComposing(true)}
+                    onCompositionEnd={() => setIsComposing(false)}
                 />
                 <div className="flex justify-end gap-2">
                     <Button size="sm" variant={'ghost'} onClick={handleCancel}>
@@ -86,7 +90,7 @@ const UserMessage = ({ message }: UserMessageProps) => {
     }
 
     function renderContent() {
-        return <div>{message.content}</div>;
+        return <div>{message.getStringContent()}</div>;
     }
 
     function renderButtons() {
@@ -103,7 +107,9 @@ const UserMessage = ({ message }: UserMessageProps) => {
                             <Icons.Reload className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Retry</TooltipContent>
+                    <TooltipContent side="top" sideOffset={5}>
+                        Retry
+                    </TooltipContent>
                 </Tooltip>
 
                 <Tooltip>
@@ -117,7 +123,9 @@ const UserMessage = ({ message }: UserMessageProps) => {
                             <Icons.Pencil className="h-4 w-4" />
                         </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Edit</TooltipContent>
+                    <TooltipContent side="top" sideOffset={5}>
+                        Edit
+                    </TooltipContent>
                 </Tooltip>
                 <Tooltip>
                     <TooltipTrigger asChild>
@@ -134,7 +142,9 @@ const UserMessage = ({ message }: UserMessageProps) => {
                             )}
                         </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Copy</TooltipContent>
+                    <TooltipContent side="top" sideOffset={5}>
+                        Copy
+                    </TooltipContent>
                 </Tooltip>
             </div>
         );
@@ -160,5 +170,3 @@ const UserMessage = ({ message }: UserMessageProps) => {
         </div>
     );
 };
-
-export default UserMessage;

@@ -1,4 +1,4 @@
-import { useEditorEngine } from '@/components/Context';
+import { useEditorEngine, useUserManager } from '@/components/Context';
 import type { ClickRectState } from '@/lib/editor/engine/overlay/state';
 import { EditorMode, EditorTabValue } from '@/lib/models';
 import { Button } from '@onlook/ui/button';
@@ -49,14 +49,21 @@ const DEFAULT_INPUT_STATE = {
 export const OverlayChat = observer(
     ({ selectedEl, elementId }: { selectedEl: ClickRectState | null; elementId: string }) => {
         const editorEngine = useEditorEngine();
-        const isInteractMode = editorEngine.mode === EditorMode.INTERACT;
+        const userManager = useUserManager();
+        const isPreviewMode = editorEngine.mode === EditorMode.PREVIEW;
         const [inputState, setInputState] = useState(DEFAULT_INPUT_STATE);
         const [isComposing, setIsComposing] = useState(false);
         const textareaRef = useRef<HTMLTextAreaElement>(null);
         const prevChatPositionRef = useRef<{ x: number; y: number } | null>(null);
         const { t } = useTranslation();
 
-        // Add effect to reset input state when elementId changes
+        const shouldHideButton =
+            !selectedEl ||
+            isPreviewMode ||
+            editorEngine.chat.isWaiting ||
+            editorEngine.chat.stream.content.length > 0 ||
+            !userManager.settings.settings?.chat?.showMiniChat;
+
         useEffect(() => {
             setInputState(DEFAULT_INPUT_STATE);
         }, [elementId]);
@@ -71,22 +78,12 @@ export const OverlayChat = observer(
                 : 0,
         };
 
-        // Calculate distance from previous chat position
-        const distance = prevChatPositionRef.current
-            ? Math.sqrt(
-                  Math.pow(chatPosition.x - prevChatPositionRef.current.x, 2) +
-                      Math.pow(chatPosition.y - prevChatPositionRef.current.y, 2),
-              )
-            : 0;
-
         useEffect(() => {
             prevChatPositionRef.current = chatPosition;
         }, [chatPosition.x, chatPosition.y]);
 
         const animationClass =
-            distance > ANIMATION.DISTANCE_THRESHOLD
-                ? 'origin-center scale-[0.2] opacity-0 -translate-y-2 transition-all duration-200'
-                : 'origin-center scale-[0.2] opacity-0 -translate-y-2 transition-all duration-200';
+            'origin-center scale-[0.2] opacity-0 -translate-y-2 transition-all duration-200';
 
         useEffect(() => {
             if (elementId) {
@@ -100,12 +97,7 @@ export const OverlayChat = observer(
             }
         }, [elementId]);
 
-        if (
-            !selectedEl ||
-            isInteractMode ||
-            editorEngine.chat.isWaiting ||
-            editorEngine.chat.streamingMessage
-        ) {
+        if (shouldHideButton) {
             return null;
         }
 
@@ -118,7 +110,7 @@ export const OverlayChat = observer(
 
         const containerStyle: React.CSSProperties = {
             position: 'fixed',
-            top: selectedEl.top - 8,
+            top: Math.max(74 + 8, selectedEl.top - 8),
             left: selectedEl.left + selectedEl.width / 2,
             transform: 'translate(-50%, 0)',
             transformOrigin: 'center center',
@@ -151,7 +143,7 @@ export const OverlayChat = observer(
                         >
                             <Icons.Sparkles className="w-4 h-4" />
                             <span className="text-miniPlus whitespace-nowrap">
-                                {t('editor.chat.button')}
+                                {t('editor.panels.edit.tabs.chat.miniChat.button')}
                             </span>
                         </button>
                     ) : (
@@ -178,7 +170,7 @@ export const OverlayChat = observer(
                                 <Icons.CrossS className="h-4 w-4 text-foreground-secondary group-hover:text-foreground transition-colors" />
                             </Button>
                             <Textarea
-                                aria-label={t('editor.chat.input')}
+                                aria-label="Chat message input"
                                 ref={textareaRef}
                                 className={cn(
                                     'w-full text-xs break-words p-1.5 focus-visible:ring-0 resize-none shadow-none border-[0.5px] rounded-lg',
@@ -202,7 +194,7 @@ export const OverlayChat = observer(
                                             textareaRef.current.scrollHeight;
                                     }
                                 }}
-                                placeholder={t('editor.chat.placeholder')}
+                                placeholder="Type your message..."
                                 style={{
                                     resize: 'none',
                                     minHeight: DIMENSIONS.singleLineHeight,

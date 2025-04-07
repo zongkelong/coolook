@@ -1,4 +1,10 @@
-import { EditorMode, EditorTabValue, SettingsTabValue } from '@/lib/models';
+import {
+    BrandTabValue,
+    EditorMode,
+    EditorTabValue,
+    LayersPanelTabValue,
+    SettingsTabValue,
+} from '@/lib/models';
 import type { ProjectsManager } from '@/lib/projects';
 import type { UserManager } from '@/lib/user';
 import { invokeMainChannel, sendAnalytics } from '@/lib/utils';
@@ -15,6 +21,7 @@ import { CodeManager } from './code';
 import { CopyManager } from './copy';
 import { ElementManager } from './element';
 import { ErrorManager } from './error';
+import { FontManager } from './font';
 import { GroupManager } from './group';
 import { HistoryManager } from './history';
 import { ImageManager } from './image';
@@ -25,14 +32,21 @@ import { PagesManager } from './pages';
 import { ProjectInfoManager } from './projectinfo';
 import { StyleManager } from './style';
 import { TextEditingManager } from './text';
+import { ThemeManager } from './theme';
 import { WebviewManager } from './webview';
 
 export class EditorEngine {
-    private _editorMode: EditorMode = EditorMode.DESIGN;
     private _plansOpen: boolean = false;
     private _settingsOpen: boolean = false;
+    private _hotkeysOpen: boolean = false;
+    private _publishOpen: boolean = false;
+    private _isLayersPanelLocked: boolean = false;
+
+    private _editorMode: EditorMode = EditorMode.DESIGN;
     private _editorPanelTab: EditorTabValue = EditorTabValue.CHAT;
-    private _settingsTab: SettingsTabValue = SettingsTabValue.PROJECT;
+    private _settingsTab: SettingsTabValue = SettingsTabValue.PREFERENCES;
+    private _layersPanelTab: LayersPanelTabValue | null = null;
+    private _brandTab: BrandTabValue | null = null;
 
     private canvasManager: CanvasManager;
     private chatManager: ChatManager;
@@ -42,6 +56,8 @@ export class EditorEngine {
     private pagesManager: PagesManager;
     private errorManager: ErrorManager;
     private imageManager: ImageManager;
+    private themeManager: ThemeManager;
+    private fontManager: FontManager;
 
     private astManager: AstManager = new AstManager(this);
     private historyManager: HistoryManager = new HistoryManager(this);
@@ -68,6 +84,8 @@ export class EditorEngine {
         this.pagesManager = new PagesManager(this, this.projectsManager);
         this.errorManager = new ErrorManager(this, this.projectsManager);
         this.imageManager = new ImageManager(this, this.projectsManager);
+        this.themeManager = new ThemeManager(this, this.projectsManager);
+        this.fontManager = new FontManager(this, this.projectsManager);
     }
 
     get elements() {
@@ -124,11 +142,20 @@ export class EditorEngine {
     get image() {
         return this.imageManager;
     }
+    get theme() {
+        return this.themeManager;
+    }
+    get font() {
+        return this.fontManager;
+    }
     get editPanelTab() {
         return this._editorPanelTab;
     }
     get settingsTab() {
         return this._settingsTab;
+    }
+    get layersPanelTab() {
+        return this._layersPanelTab;
     }
     get isPlansOpen() {
         return this._plansOpen;
@@ -136,11 +163,30 @@ export class EditorEngine {
     get isSettingsOpen() {
         return this._settingsOpen;
     }
+    get isPublishOpen() {
+        return this._publishOpen;
+    }
+    get isHotkeysOpen() {
+        return this._hotkeysOpen;
+    }
+    get brandTab() {
+        return this._brandTab;
+    }
     get errors() {
         return this.errorManager;
     }
     get isWindowSelected() {
         return this.webviews.selected.length > 0 && this.elements.selected.length === 0;
+    }
+    get pages() {
+        return this.pagesManager;
+    }
+    get isLayersPanelLocked() {
+        return this._isLayersPanelLocked;
+    }
+
+    set isLayersPanelLocked(value: boolean) {
+        this._isLayersPanelLocked = value;
     }
 
     set mode(mode: EditorMode) {
@@ -155,6 +201,10 @@ export class EditorEngine {
         this._settingsTab = tab;
     }
 
+    set layersPanelTab(tab: LayersPanelTabValue | null) {
+        this._layersPanelTab = tab;
+    }
+
     set isPlansOpen(open: boolean) {
         this._plansOpen = open;
         if (open) {
@@ -166,8 +216,16 @@ export class EditorEngine {
         this._settingsOpen = open;
     }
 
-    get pages() {
-        return this.pagesManager;
+    set isHotkeysOpen(value: boolean) {
+        this._hotkeysOpen = value;
+    }
+
+    set isPublishOpen(open: boolean) {
+        this._publishOpen = open;
+    }
+
+    set brandTab(tab: BrandTabValue | null) {
+        this._brandTab = tab;
     }
 
     dispose() {
@@ -190,9 +248,8 @@ export class EditorEngine {
         this.groupManager?.dispose();
         this.canvasManager?.clear();
         this.imageManager?.dispose();
-        this._editorMode = EditorMode.DESIGN;
-        this._editorPanelTab = EditorTabValue.STYLES;
-        this._settingsTab = SettingsTabValue.DOMAIN;
+        this.themeManager?.dispose();
+        this.fontManager?.dispose();
         this._settingsOpen = false;
         this._plansOpen = false;
     }
@@ -236,7 +293,7 @@ export class EditorEngine {
         image?: string;
     } | null> {
         if (this.webviews.webviews.size === 0) {
-            console.error('No webviews found');
+            console.error('Failed to take screenshot, no webviews found');
             return null;
         }
         const webviewId = Array.from(this.webviews.webviews.values())[0].webview.id;
@@ -318,6 +375,7 @@ export class EditorEngine {
         if (webview) {
             this.webviews.deregister(webview);
         }
+        sendAnalytics('window delete');
     }
 
     duplicateWindow(id?: string) {
@@ -342,7 +400,10 @@ export class EditorEngine {
                 width: currentFrame.dimension.width,
                 height: currentFrame.dimension.height,
             },
-            position: currentFrame.position,
+            position: {
+                x: currentFrame.position.x + currentFrame.dimension.width + 100,
+                y: currentFrame.position.y,
+            },
             aspectRatioLocked: currentFrame.aspectRatioLocked,
             orientation: currentFrame.orientation,
             device: currentFrame.device,
@@ -350,5 +411,6 @@ export class EditorEngine {
         };
 
         this.canvas.frames = [...this.canvas.frames, newFrame];
+        sendAnalytics('window duplicate');
     }
 }

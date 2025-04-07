@@ -6,6 +6,7 @@ export enum ApiRoutes {
     AI_V2 = '/ai-v2',
     ANALYTICS = '/analytics',
     HOSTING = '/hosting',
+    HOSTING_V2 = '/hosting/v2',
     CUSTOM_DOMAINS = '/custom-domains',
     CREATE_CHECKOUT = '/create-checkout',
     CHECK_SUBSCRIPTION = '/check-subscription',
@@ -15,6 +16,14 @@ export enum ApiRoutes {
 export const BASE_PROXY_ROUTE = '/proxy';
 export enum ProxyRoutes {
     ANTHROPIC = '/anthropic',
+    TRAINLOOP = '/trainloop',
 }
 export const REDIRECT_APP_URL = 'https://onlook.dev/redirect-app';
 export const REQUEST_TYPE_HEADER = 'X-Onlook-Request-Type';
+
+export enum HostingRoutes {
+    CREATE_DOMAIN_VERIFICATION = '/create-domain-verification',
+    VERIFY_DOMAIN = '/verify-domain',
+    DEPLOY_WEB = '/deploy-web',
+    OWNED_DOMAINS = '/owned-domains',
+}
